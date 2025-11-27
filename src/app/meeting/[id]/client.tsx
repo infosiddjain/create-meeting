@@ -12,9 +12,8 @@ export default function MeetingPageClient({ id }: { id: string }) {
   const [guestName, setGuestName] = useState("");
 
   useEffect(() => {
-    socketRef.current = io(window.location.origin, {
-      path: "/api/socket/io",
-      transports: ["polling", "websocket"],
+    socketRef.current = io("https://node-meeting.onrender.com", {
+      transports: ["websocket"],
     });
 
     socketRef.current.emit("check-role", id);
