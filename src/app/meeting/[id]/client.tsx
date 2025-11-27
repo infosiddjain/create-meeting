@@ -8,6 +8,18 @@ type RemoteStream = {
   stream: MediaStream;
 };
 
+type MeetingUser = {
+  userId: string;
+  name: string;
+  joinedAt: string;
+  leftAt?: string;
+};
+
+type MeetingData = {
+  roomId: string;
+  users: MeetingUser[];
+};
+
 const ICE_CONFIG: RTCConfiguration = {
   iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
 };
@@ -15,6 +27,7 @@ const ICE_CONFIG: RTCConfiguration = {
 export default function MeetingPageClient({ id }: { id: string }) {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStreams, setRemoteStreams] = useState<RemoteStream[]>([]);
+  const [meetingData, setMeetingData] = useState<MeetingData | null>(null);
   const [connecting, setConnecting] = useState(true);
 
   const socketRef = useRef<any>(null);
@@ -22,6 +35,26 @@ export default function MeetingPageClient({ id }: { id: string }) {
   const localStreamRef = useRef<MediaStream | null>(null);
   const peersRef = useRef<{ [userId: string]: RTCPeerConnection }>({});
   const nameRef = useRef<string>("User-" + Math.floor(Math.random() * 1000));
+
+  const fetchMeetingDetails = async () => {
+    try {
+      const res = await fetch(
+        `https://node-meeting.onrender.com/meeting/${id}`
+      );
+      const data = await res.json();
+      setMeetingData(data);
+    } catch (err) {
+      console.log("Failed to load meeting data");
+    }
+  };
+
+  useEffect(() => {
+    fetchMeetingDetails();
+
+    const interval = setInterval(fetchMeetingDetails, 5000);
+
+    return () => clearInterval(interval);
+  }, [id]);
 
   useEffect(() => {
     const socket = io("https://node-meeting.onrender.com", {
@@ -60,6 +93,15 @@ export default function MeetingPageClient({ id }: { id: string }) {
     socket.on("connect", () => {
       console.log("Socket connected:", socket.id);
       start();
+      fetchMeetingDetails();
+    });
+
+    socket.on("user-joined", () => {
+      fetchMeetingDetails();
+    });
+
+    socket.on("user-left", () => {
+      fetchMeetingDetails();
     });
 
     socket.on("existing-users", (users: string[]) => {
@@ -67,15 +109,12 @@ export default function MeetingPageClient({ id }: { id: string }) {
     });
 
     socket.on("user-joined", ({ userId }) => {
-      console.log("User joined room:", userId);
       if (!localStreamRef.current) return;
       createPeerConnection(userId, true);
     });
 
     socket.on("offer", async ({ from, sdp }) => {
-      console.log("Received offer from", from);
       if (!localStreamRef.current) return;
-
       const peer = createPeerConnection(from, false);
       await peer.setRemoteDescription(new RTCSessionDescription(sdp));
       const answer = await peer.createAnswer();
@@ -89,10 +128,8 @@ export default function MeetingPageClient({ id }: { id: string }) {
     });
 
     socket.on("answer", async ({ from, sdp }) => {
-      console.log("Received answer from", from);
       const peer = peersRef.current[from];
       if (!peer) return;
-
       await peer.setRemoteDescription(new RTCSessionDescription(sdp));
     });
 
@@ -108,7 +145,6 @@ export default function MeetingPageClient({ id }: { id: string }) {
     });
 
     socket.on("user-left", ({ userId }) => {
-      console.log("User left:", userId);
       const peer = peersRef.current[userId];
       if (peer) {
         peer.close();
@@ -136,8 +172,8 @@ export default function MeetingPageClient({ id }: { id: string }) {
     const peer = new RTCPeerConnection(ICE_CONFIG);
 
     peersRef.current[remoteUserId] = peer;
-
     const stream = localStreamRef.current;
+
     if (stream) {
       stream.getTracks().forEach((track) => peer.addTrack(track, stream));
     }
@@ -190,8 +226,8 @@ export default function MeetingPageClient({ id }: { id: string }) {
         </p>
       )}
 
+      {/* Live Video Section */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {/* Local video */}
         <div className="flex flex-col items-center">
           <div className="mb-1 text-sm text-gray-300">
             You ({nameRef.current})
@@ -205,7 +241,6 @@ export default function MeetingPageClient({ id }: { id: string }) {
           />
         </div>
 
-        {/* Remote videos */}
         {remoteStreams.map(({ userId, stream }) => (
           <div key={userId} className="flex flex-col items-center">
             <div className="mb-1 text-sm text-gray-300">
@@ -226,6 +261,26 @@ export default function MeetingPageClient({ id }: { id: string }) {
         ))}
       </div>
 
+      {/* Meeting Users Cards */}
+      <h3 className="text-lg font-semibold mt-6 mb-2">Participants History</h3>
+      <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+        {meetingData?.users?.map((u) => (
+          <div
+            key={u.userId}
+            className="p-3 bg-gray-800 text-white rounded border border-gray-600"
+          >
+            <p className="font-bold">{u.name}</p>
+            <p className="text-sm">
+              Joined: {new Date(u.joinedAt).toLocaleString()}
+            </p>
+            <p className="text-sm">
+              Left: {u.leftAt ? new Date(u.leftAt).toLocaleString() : "Online"}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      {/* Copy link button */}
       <div className="flex justify-center mt-6">
         <button
           onClick={() => {
