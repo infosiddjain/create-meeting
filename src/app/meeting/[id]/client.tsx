@@ -3,113 +3,240 @@
 import React, { useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
 
+type RemoteStream = {
+  userId: string;
+  stream: MediaStream;
+};
+
+const ICE_CONFIG: RTCConfiguration = {
+  iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+};
+
 export default function MeetingPageClient({ id }: { id: string }) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const [stream, setStream] = useState<MediaStream | null>(null);
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  const [remoteStreams, setRemoteStreams] = useState<RemoteStream[]>([]);
+  const [connecting, setConnecting] = useState(true);
+
   const socketRef = useRef<any>(null);
-  const [role, setRole] = useState<"host" | "guest" | null>(null);
-  const [requests, setRequests] = useState<any[]>([]);
-  const [guestName, setGuestName] = useState("");
+  const localVideoRef = useRef<HTMLVideoElement | null>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const peersRef = useRef<{ [userId: string]: RTCPeerConnection }>({});
+  const nameRef = useRef<string>("User-" + Math.floor(Math.random() * 1000));
 
   useEffect(() => {
-    socketRef.current = io("https://node-meeting.onrender.com", {
+    const socket = io("https://node-meeting.onrender.com", {
       transports: ["websocket"],
     });
+    socketRef.current = socket;
 
-    socketRef.current.emit("check-role", id);
+    let isMounted = true;
 
-    socketRef.current.on("role", (type: any) => setRole(type));
+    const start = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: true,
+        });
 
-    socketRef.current.on("approved", () => {
-      joinRoom();
+        if (!isMounted) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+
+        localStreamRef.current = stream;
+        setLocalStream(stream);
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = stream;
+        }
+
+        socket.emit("join-room", { roomId: id, name: nameRef.current });
+        setConnecting(false);
+      } catch (err) {
+        console.error("getUserMedia error:", err);
+        setConnecting(false);
+      }
+    };
+
+    socket.on("connect", () => {
+      console.log("Socket connected:", socket.id);
+      start();
     });
 
-    socketRef.current.on("join-request", (user: any) =>
-      setRequests((prev) => [...prev, user])
-    );
+    socket.on("existing-users", (users: string[]) => {
+      console.log("Existing users in room:", users);
+    });
 
-    return () => socketRef.current.disconnect();
+    socket.on("user-joined", ({ userId }) => {
+      console.log("User joined room:", userId);
+      if (!localStreamRef.current) return;
+      createPeerConnection(userId, true);
+    });
+
+    socket.on("offer", async ({ from, sdp }) => {
+      console.log("Received offer from", from);
+      if (!localStreamRef.current) return;
+
+      const peer = createPeerConnection(from, false);
+      await peer.setRemoteDescription(new RTCSessionDescription(sdp));
+      const answer = await peer.createAnswer();
+      await peer.setLocalDescription(answer);
+
+      socket.emit("answer", {
+        to: from,
+        from: socket.id,
+        sdp: answer,
+      });
+    });
+
+    socket.on("answer", async ({ from, sdp }) => {
+      console.log("Received answer from", from);
+      const peer = peersRef.current[from];
+      if (!peer) return;
+
+      await peer.setRemoteDescription(new RTCSessionDescription(sdp));
+    });
+
+    socket.on("ice-candidate", async ({ from, candidate }) => {
+      const peer = peersRef.current[from];
+      if (!peer) return;
+
+      try {
+        await peer.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (err) {
+        console.error("Error adding ICE candidate", err);
+      }
+    });
+
+    socket.on("user-left", ({ userId }) => {
+      console.log("User left:", userId);
+      const peer = peersRef.current[userId];
+      if (peer) {
+        peer.close();
+        delete peersRef.current[userId];
+      }
+      setRemoteStreams((prev) => prev.filter((u) => u.userId !== userId));
+    });
+
+    return () => {
+      isMounted = false;
+      socket.disconnect();
+
+      Object.values(peersRef.current).forEach((pc) => pc.close());
+      peersRef.current = {};
+
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach((t) => t.stop());
+      }
+      setRemoteStreams([]);
+    };
   }, [id]);
 
-  const joinRoom = () => {
-    socketRef.current.emit("join-room", id);
+  const createPeerConnection = (remoteUserId: string, isOfferer: boolean) => {
+    const socket = socketRef.current;
+    const peer = new RTCPeerConnection(ICE_CONFIG);
 
-    navigator.mediaDevices
-      .getUserMedia({ video: true, audio: true })
-      .then((s) => {
-        setStream(s);
-        if (videoRef.current) videoRef.current.srcObject = s;
+    peersRef.current[remoteUserId] = peer;
+
+    const stream = localStreamRef.current;
+    if (stream) {
+      stream.getTracks().forEach((track) => peer.addTrack(track, stream));
+    }
+
+    peer.onicecandidate = (event) => {
+      if (event.candidate) {
+        socket.emit("ice-candidate", {
+          to: remoteUserId,
+          from: socket.id,
+          candidate: event.candidate,
+        });
+      }
+    };
+
+    peer.ontrack = (event) => {
+      const [remoteStream] = event.streams;
+      setRemoteStreams((prev) => {
+        const exists = prev.find((p) => p.userId === remoteUserId);
+        if (exists) {
+          return prev.map((p) =>
+            p.userId === remoteUserId ? { ...p, stream: remoteStream } : p
+          );
+        }
+        return [...prev, { userId: remoteUserId, stream: remoteStream }];
       });
-  };
+    };
 
-  const requestJoin = () => {
-    socketRef.current.emit("request-join", { roomId: id, name: guestName });
-  };
+    if (isOfferer) {
+      (async () => {
+        const offer = await peer.createOffer();
+        await peer.setLocalDescription(offer);
+        socket.emit("offer", {
+          to: remoteUserId,
+          from: socket.id,
+          sdp: offer,
+        });
+      })();
+    }
 
-  const approveUser = (userId: string) => {
-    socketRef.current.emit("approve-user", { roomId: id, userId });
-    setRequests((prev) => prev.filter((u) => u.id !== userId));
+    return peer;
   };
-
-  if (role === "guest" && !stream) {
-    return (
-      <div className="p-10 text-center">
-        <h2 className="text-xl font-bold mb-4">Ask to Join Meeting</h2>
-        <input
-          value={guestName}
-          onChange={(e) => setGuestName(e.target.value)}
-          placeholder="Enter your name"
-          className="border p-2"
-        />
-        <button
-          disabled={!guestName}
-          onClick={requestJoin}
-          className="ml-3 bg-blue-600 text-white px-4 py-2 rounded disabled:bg-gray-400"
-        >
-          Request to Join
-        </button>
-      </div>
-    );
-  }
 
   return (
-    <div className="flex flex-col items-center gap-4 mt-10">
-      <h2 className="text-xl font-bold">
-        Meeting ID: {id} ({role})
-      </h2>
+    <div className="p-4">
+      <h2 className="text-xl font-bold text-center mb-4">Room: {id}</h2>
 
-      {role === "host" && requests.length > 0 && (
-        <div className="bg-gray-200 p-3 rounded shadow-lg">
-          {requests.map((u) => (
-            <div key={u.id} className="flex justify-between mb-2">
-              <span>{u.name} wants to join</span>
-              <button
-                onClick={() => approveUser(u.id)}
-                className="bg-green-500 text-white px-2 py-1 rounded"
-              >
-                Allow
-              </button>
-            </div>
-          ))}
-        </div>
+      {connecting && (
+        <p className="text-center mb-4 text-gray-400">
+          Connecting to camera & room...
+        </p>
       )}
 
-      <video
-        ref={videoRef}
-        autoPlay
-        playsInline
-        className="w-1/2 rounded-lg border"
-      />
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {/* Local video */}
+        <div className="flex flex-col items-center">
+          <div className="mb-1 text-sm text-gray-300">
+            You ({nameRef.current})
+          </div>
+          <video
+            ref={localVideoRef}
+            autoPlay
+            muted
+            playsInline
+            className="w-full aspect-video bg-black rounded-lg border border-gray-600"
+          />
+        </div>
 
-      <button
-        onClick={() => {
-          navigator.clipboard.writeText(window.location.href);
-          alert("Copied!");
-        }}
-        className="bg-blue-600 text-white px-4 py-2 rounded"
-      >
-        Copy Invite Link
-      </button>
+        {/* Remote videos */}
+        {remoteStreams.map(({ userId, stream }) => (
+          <div key={userId} className="flex flex-col items-center">
+            <div className="mb-1 text-sm text-gray-300">
+              User {userId.slice(0, 6)}
+            </div>
+            <video
+              autoPlay
+              playsInline
+              className="w-full aspect-video bg-black rounded-lg border border-gray-600"
+              ref={(el) => {
+                if (el && stream) {
+                  // @ts-ignore
+                  el.srcObject = stream;
+                }
+              }}
+            />
+          </div>
+        ))}
+      </div>
+
+      <div className="flex justify-center mt-6">
+        <button
+          onClick={() => {
+            navigator.clipboard.writeText(window.location.href);
+            alert("Meeting link copied!");
+          }}
+          className="bg-blue-600 text-white px-4 py-2 rounded"
+        >
+          Copy Invite Link
+        </button>
+      </div>
     </div>
   );
 }
