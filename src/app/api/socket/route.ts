@@ -5,6 +5,7 @@ const ioHandler = (req: any, res: any) => {
     const io = new Server(res.socket.server);
     io.on("connection", (socket) => {
       socket.on("join-room", (roomId) => {
+        console.log("check-->", roomId);
         socket.join(roomId);
         socket.to(roomId).emit("user-joined", socket.id);
       });
