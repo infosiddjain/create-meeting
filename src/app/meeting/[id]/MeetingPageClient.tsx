@@ -1,3 +1,4 @@
+// meetingPageClient.js
 "use client";
 
 import { useEffect, useState } from "react";
@@ -110,7 +111,7 @@ export default function MeetingPageClient({ id, role }: any) {
       </div>
     );
 
-  if (isWaiting) return <MeetingWaitingScreen id={id} />;
+  // if (isWaiting) return <MeetingWaitingScreen id={id} />;
 
   return (
     <MeetingUI
