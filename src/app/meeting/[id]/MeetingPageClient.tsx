@@ -264,7 +264,7 @@ export default function MeetingPageClient({
     <div className="h-screen w-screen bg-[#0d0d0d] text-white flex flex-col overflow-hidden">
       <div className="w-full px-6 py-3 border-b border-gray-800 flex items-center justify-between bg-[#111]">
         <div>
-          <h1 className="text-lg font-semibold">Meeting Room</h1>
+          <h1 className="text-lg font-semibold">Peer Plus Meeting Room</h1>
           <p className="text-sm text-gray-400">ID: {id}</p>
         </div>
 
@@ -344,6 +344,7 @@ export default function MeetingPageClient({
         setMessage={setMessage}
         onSend={sendChatMessage}
         username={nameRef.current}
+        onClose={() => setChatOpen(false)}
       />
     </div>
   );

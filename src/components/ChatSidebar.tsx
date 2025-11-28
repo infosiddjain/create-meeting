@@ -9,6 +9,7 @@ export default function ChatSidebar({
   setMessage,
   onSend,
   username,
+  onClose,
 }: any) {
   const chatEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -24,6 +25,13 @@ export default function ChatSidebar({
     >
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700">
         <h2 className="text-lg font-semibold">Chat</h2>
+
+        <button
+          onClick={onClose}
+          className="text-gray-300 hover:text-white transition"
+        >
+          ✕
+        </button>
       </div>
 
       <div className="p-4 space-y-3 h-[calc(100%-100px)] overflow-y-auto">
