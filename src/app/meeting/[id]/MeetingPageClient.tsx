@@ -261,45 +261,66 @@ export default function MeetingPageClient({
   };
 
   return (
-    <div className="p-4 bg-green-800 min-h-screen">
-      <h2 className="text-xl font-bold text-center mb-4">Room: {id}</h2>
-
-      {connecting && <p className="text-center text-gray-400">Connecting...</p>}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
-        <div className="relative bg-black rounded-lg overflow-hidden aspect-video">
-          <video
-            ref={localVideoRef}
-            autoPlay
-            muted
-            playsInline
-            className="w-full h-full object-cover"
-          />
-          <div className="absolute bottom-2 left-2 bg-black bg-opacity-40 text-white px-2 py-1 rounded">
-            You ({nameRef.current})
-          </div>
+    <div className="h-screen w-screen bg-[#0d0d0d] text-white flex flex-col overflow-hidden">
+      <div className="w-full px-6 py-3 border-b border-gray-800 flex items-center justify-between bg-[#111]">
+        <div>
+          <h1 className="text-lg font-semibold">Meeting Room</h1>
+          <p className="text-sm text-gray-400">ID: {id}</p>
         </div>
 
-        {remoteStreams.map(({ userId, stream }) => (
-          <div
-            key={userId}
-            className="relative bg-black rounded-lg overflow-hidden aspect-video"
-          >
+        <div className="flex items-center gap-3">
+          <span className="px-3 py-1 rounded-full text-sm bg-gray-800 border border-gray-700">
+            Role: {role}
+          </span>
+
+          <span className="px-3 py-1 rounded-full bg-gray-800 border border-gray-700 text-sm">
+            {new Date().toLocaleTimeString()}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex-1 p-4 overflow-auto custom-scrollbar">
+        <div
+          className="
+          grid gap-4
+          grid-cols-1
+          sm:grid-cols-2
+          lg:grid-cols-3
+          xl:grid-cols-4
+        "
+        >
+          <div className="relative bg-black rounded-xl overflow-hidden aspect-video shadow-lg">
             <video
+              ref={localVideoRef}
               autoPlay
+              muted
               playsInline
               className="w-full h-full object-cover"
-              ref={(el) => {
-                if (el) {
-                  el.srcObject = stream;
-                }
-              }}
             />
-            <div className="absolute bottom-2 left-2 bg-black bg-opacity-40 text-white px-2 py-1 rounded">
-              User {userId.slice(0, 5)}
+            <div className="absolute bottom-3 left-3 px-3 py-1 bg-black/60 rounded-full text-sm">
+              You ({nameRef.current})
             </div>
           </div>
-        ))}
+
+          {remoteStreams.map(({ userId, stream }) => (
+            <div
+              key={userId}
+              className="relative bg-black rounded-xl overflow-hidden aspect-video shadow-lg"
+            >
+              <video
+                autoPlay
+                playsInline
+                className="w-full h-full object-cover"
+                ref={(el) => {
+                  if (el) el.srcObject = stream;
+                }}
+              />
+              <div className="absolute bottom-3 left-3 px-3 py-1 bg-black/60 rounded-full text-sm">
+                {userId.slice(0, 6)}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
       <MeetingControls
