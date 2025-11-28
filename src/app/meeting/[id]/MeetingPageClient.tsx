@@ -350,6 +350,12 @@
 //   );
 // }
 
-export default function MeetingPageClient() {
+export default function MeetingPageClient({
+  id,
+  role,
+}: {
+  id: string;
+  role: string;
+}) {
   return <h1>hello</h1>;
 }
