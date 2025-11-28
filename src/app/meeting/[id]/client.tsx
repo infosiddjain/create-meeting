@@ -43,7 +43,6 @@
 //   const peersRef = useRef<{ [userId: string]: RTCPeerConnection }>({});
 //   const nameRef = useRef<string>("User-" + Math.floor(Math.random() * 1000));
 
-//   // role detection: ?role=host
 //   const [isHost, setIsHost] = useState(false);
 //   useEffect(() => {
 //     try {
@@ -54,11 +53,9 @@
 //     }
 //   }, []);
 
-//   // mic / video enabled state
 //   const [micOn, setMicOn] = useState(true);
 //   const [videoOn, setVideoOn] = useState(true);
 
-//   // fetch meeting participants history
 //   const fetchMeetingDetails = async () => {
 //     try {
 //       const res = await fetch(
@@ -77,7 +74,6 @@
 //     return () => clearInterval(interval);
 //   }, [id]);
 
-//   // helper to start local media and join room (emits "join-room")
 //   const startMediaAndJoin = async (socket: any, emitIsHost = false) => {
 //     try {
 //       const stream = await navigator.mediaDevices.getUserMedia({
@@ -95,7 +91,6 @@
 //       if (audioTrack) audioTrack.enabled = micOn;
 //       if (videoTrack) videoTrack.enabled = videoOn;
 
-//       // finally emit join-room (server will save and notify other users)
 //       socket.emit("join-room", {
 //         roomId: id,
 //         name: nameRef.current,
@@ -118,7 +113,6 @@
 
 //     let isMounted = true;
 
-//     // When connected, request to join. Host should request with isHost flag
 //     socket.on("connect", () => {
 //       console.log("Socket connected:", socket.id);
 
@@ -514,3 +508,7 @@
 //     </div>
 //   );
 // }
+
+export default function MeetingPageClient({ id }: { id: string }) {
+  return <h1>Hello</h1>;
+}
