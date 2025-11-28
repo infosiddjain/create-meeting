@@ -17,7 +17,14 @@ const ICE_CONFIG: RTCConfiguration = {
   iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
 };
 
-export default function MeetingPageClient({ id }: { id: string }) {
+export default function MeetingPageClient({
+  id,
+  role,
+}: {
+  id: string;
+  role: string;
+}) {
+  console.log("User role:", role);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStreams, setRemoteStreams] = useState<RemoteStream[]>([]);
   const [meetingData, setMeetingData] = useState<MeetingData | null>(null);

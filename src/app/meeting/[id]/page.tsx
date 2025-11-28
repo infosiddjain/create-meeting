@@ -1,11 +1,14 @@
 import MeetingPageClient from "./MeetingPageClient";
 
-export default async function Page(props: {
-  params: Promise<any>;
-  searchParams: Promise<any>;
+export default function Page({
+  params,
+  searchParams,
+}: {
+  params: { id: string };
+  searchParams: { role?: string };
 }) {
-  const { id } = await props.params;
-  const { role = "guest" } = await props.searchParams;
+  const { id } = params;
+  const role = searchParams?.role || "guest";
 
   return <MeetingPageClient id={id} role={role} />;
 }
